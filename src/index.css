@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  --animate-spin-slow: spin 3s linear infinite;
+}
+
+@layer components {
+  .card-shadow {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .jd-sidebar-item {
+    @apply transition-colors duration-200;
+  }
+
+  .jd-sidebar-item:hover {
+    color: #2563eb;
+    background-color: #eff6ff;
+  }
+
+  .scroll-text {
+    animation: slideUp 20s linear infinite;
+  }
+
+  @keyframes slideUp {
+    0% {
+      transform: translateY(0);
+    }
+    100% {
+      transform: translateY(-50%);
+    }
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
