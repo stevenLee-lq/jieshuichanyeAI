@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>水麒麟 · 基础框架（静态模型）</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      /* 与站内首页一致的浅灰白背景 */
+      background: #f0f2f5;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+    }
+    /* 左侧留白（后续可放内容）；右侧固定比例放置 3D 视图 */
+    #page {
+      display: flex;
+      width: 100%;
+      min-height: 100vh;
+      height: 100%;
+    }
+    #left {
+      flex: 1;
+      min-width: 0;
+    }
+    /* 右侧视图：模型在此区域内水平垂直居中 */
+    #viewer {
+      flex: 0 0 42%;
+      min-width: 280px;
+      max-width: 640px;
+      height: 100vh;
+      position: relative;
+    }
+    #viewer canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      outline: none;
+    }
+    #hint {
+      position: fixed;
+      top: 12px;
+      right: 24px;
+      font-size: 12px;
+      color: #64748b;
+      pointer-events: none;
+      z-index: 5;
+    }
+  </style>
+</head>
+<body>
+  <p id="hint">拖动旋转 · 滚轮缩放</p>
+  <div id="page">
+    <div id="left" aria-hidden="true"></div>
+    <div id="viewer"></div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    /**
+     * 基础框架：静态 Q 版龙（程序化几何）
+     * 调色常量 —— 修改此处即可改配色
+     */
+    const BG_PAGE = 0xf0f2f5;      /* 与 CSS background 一致 */
+    const MAIN_BODY = 0x2ec4b6;    /* 青蓝身体 */
+    const BELLY = 0xf5f0e8;       /* 米白腹部 */
+    const GOLD = 0xe8c878;        /* 金色角、趾 */
+    const BLUSH = 0xffb7c5;       /* 腮红 */
+    const ACCENT_TEAL = 0x5eead4; /* 水滴/尾尖点缀 */
+
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const viewer = document.getElementById('viewer');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(BG_PAGE);
+
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+    camera.position.set(0, 0.35, 2.75);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    viewer.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.07;
+    controls.minDistance = 1.15;
+    controls.maxDistance = 5;
+    controls.target.set(0, 0.12, 0);
+
+    function bodyMat(color, rough = 0.42, metal = 0.08) {
+      return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
+    }
+
+    const dragon = new THREE.Group();
+    scene.add(dragon);
+
+    const torso = new THREE.Group();
+    dragon.add(torso);
+
+    const bodyGeo = new THREE.SphereGeometry(0.45, 32, 24);
+    bodyGeo.scale(1, 0.95, 0.85);
+    const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat(MAIN_BODY));
+    bodyMesh.castShadow = true;
+    bodyMesh.receiveShadow = true;
+    torso.add(bodyMesh);
+
+    const bellyGeo = new THREE.SphereGeometry(0.32, 24, 20);
+    bellyGeo.scale(1.1, 0.85, 0.5);
+    const belly = new THREE.Mesh(bellyGeo, bodyMat(BELLY, 0.5, 0.02));
+    belly.position.set(0, -0.02, 0.32);
+    torso.add(belly);
+
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 0.52, 0.05);
+    torso.add(headGroup);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.38, 32, 28), bodyMat(MAIN_BODY));
+    head.castShadow = true;
+    headGroup.add(head);
+
+    const snout = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), bodyMat(BELLY, 0.48, 0.02));
+    snout.scale.set(1, 0.75, 1.1);
+    snout.position.set(0, -0.06, 0.38);
+    headGroup.add(snout);
+
+    const drop = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.18, 12), bodyMat(ACCENT_TEAL, 0.25, 0.15));
+    drop.position.set(0, 0.42, 0.05);
+    drop.rotation.x = Math.PI;
+    headGroup.add(drop);
+
+    const hornGeo = new THREE.ConeGeometry(0.06, 0.22, 10);
+    const hornMat = bodyMat(GOLD, 0.35, 0.35);
+    const hornL = new THREE.Mesh(hornGeo, hornMat);
+    hornL.position.set(-0.22, 0.36, 0);
+    hornL.rotation.z = 0.35;
+    hornL.rotation.x = -0.15;
+    headGroup.add(hornL);
+    const hornR = hornL.clone();
+    hornR.position.x *= -1;
+    hornR.rotation.z *= -1;
+    headGroup.add(hornR);
+
+    function makeEye(side) {
+      const g = new THREE.Group();
+      const white = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 16), bodyMat(0xffffff, 0.25, 0));
+      white.position.z = 0.34;
+      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 12), bodyMat(0x1a2e28, 0.2, 0));
+      pupil.position.set(side * 0.02, 0, 0.42);
+      g.add(white, pupil);
+      g.position.set(side * 0.16, 0.06, 0.28);
+      return g;
+    }
+    headGroup.add(makeEye(-1));
+    headGroup.add(makeEye(1));
+
+    function blush(side) {
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 12), bodyMat(BLUSH, 0.55, 0));
+      b.position.set(side * 0.22, -0.05, 0.3);
+      headGroup.add(b);
+    }
+    blush(-1);
+    blush(1);
+
+    const earGeo = new THREE.SphereGeometry(0.1, 12, 12);
+    earGeo.scale(0.6, 1, 0.5);
+    const ear = new THREE.Mesh(earGeo, bodyMat(MAIN_BODY));
+    ear.position.set(-0.38, 0.1, -0.05);
+    headGroup.add(ear);
+    const ear2 = ear.clone();
+    ear2.position.x *= -1;
+    headGroup.add(ear2);
+
+    function arm(side) {
+      const shoulder = new THREE.Group();
+      shoulder.position.set(side * 0.42, 0.15, 0.05);
+      const armMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.28, 6, 12), bodyMat(MAIN_BODY));
+      armMesh.rotation.z = side * -0.45;
+      armMesh.position.set(side * 0.12, -0.18, 0);
+      shoulder.add(armMesh);
+      return shoulder;
+    }
+    torso.add(arm(-1));
+    torso.add(arm(1));
+
+    function leg(side) {
+      const g = new THREE.Group();
+      g.position.set(side * 0.22, -0.42, 0.08);
+      const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.22, 6, 10), bodyMat(MAIN_BODY));
+      upper.position.y = -0.12;
+      const foot = new THREE.Mesh(new THREE.SphereGeometry(0.12, 14, 14), bodyMat(BELLY, 0.45, 0.05));
+      foot.scale.set(1.1, 0.65, 1.3);
+      foot.position.y = -0.32;
+      for (let i = -1; i <= 1; i++) {
+        const toe = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), bodyMat(GOLD, 0.4, 0.4));
+        toe.position.set(i * 0.06, -0.38, 0.08);
+        g.add(toe);
+      }
+      g.add(upper, foot);
+      return g;
+    }
+    torso.add(leg(-1));
+    torso.add(leg(1));
+
+    const tailRoot = new THREE.Group();
+    tailRoot.position.set(0, -0.05, -0.38);
+    torso.add(tailRoot);
+    let prev = tailRoot;
+    for (let i = 0; i < 5; i++) {
+      const seg = new THREE.Group();
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.14 - i * 0.015, 16, 16),
+        bodyMat(MAIN_BODY)
+      );
+      mesh.position.set(0, 0, -0.12);
+      seg.add(mesh);
+      seg.position.set(0, 0, i === 0 ? -0.05 : -0.14);
+      prev.add(seg);
+      prev = seg;
+    }
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.2, 10), bodyMat(ACCENT_TEAL, 0.35, 0.12));
+    tip.position.set(0, 0.05, -0.18);
+    tip.rotation.x = Math.PI / 2;
+    prev.add(tip);
+
+    const hemi = new THREE.HemisphereLight(0xffffff, 0xb8c5d0, 0.85);
+    scene.add(hemi);
+    const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+    dir.position.set(3, 8, 5);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(1024, 1024);
+    scene.add(dir);
+    const fill = new THREE.DirectionalLight(0xa8e8e0, 0.35);
+    fill.position.set(-4, 2, -2);
+    scene.add(fill);
+
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(8, 8),
+      new THREE.ShadowMaterial({ opacity: 0.06 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.75;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    function resize() {
+      const w = viewer.clientWidth;
+      const h = viewer.clientHeight;
+      camera.aspect = w / Math.max(h, 1);
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+
+    window.addEventListener('resize', resize);
+    window.addEventListener('load', resize);
+    resize();
+
+    function tick() {
+      requestAnimationFrame(tick);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    tick();
+
+    /* 替换为 GLTF：在此 loader.load 后 scene.add(model)，并删除 dragon 组即可 */
+  </script>
+</body>
+</html>

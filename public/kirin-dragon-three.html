@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>水麒麟 · Three.js 程序化角色</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+      background: #f0f2f5; /* 浅灰白背景，突出角色 */
+    }
+    /* 角色容器：约页面宽度的 20%，可按需改 width */
+    #viewport {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 20vw;
+      min-width: 180px;
+      max-width: 320px;
+      height: min(70vh, 520px);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    #viewport canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      outline: none;
+    }
+    /* 极简操作条：仅功能按钮 */
+    #toolbar {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      z-index: 10;
+    }
+    #toolbar button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 8px;
+      background: #14b8a6;
+      color: #fff;
+      font-size: 13px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(20, 184, 166, 0.35);
+    }
+    #toolbar button:hover {
+      background: #0d9488;
+    }
+    #hint {
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      color: #64748b;
+      text-align: center;
+      max-width: 90vw;
+    }
+  </style>
+</head>
+<body>
+  <p id="hint">拖动旋转视角 · 滚轮缩放 · 下方按钮触发动画</p>
+  <div id="viewport"></div>
+  <div id="toolbar">
+    <button type="button" data-act="wave">挥手</button>
+    <button type="button" data-act="nod">点头</button>
+    <button type="button" data-act="tail">摆尾</button>
+    <button type="button" id="toggle-auto">自动循环：开</button>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    /**
+     * 水麒麟 Q 版龙 — 程序化几何体 + PBR 材质
+     * 调色：改 MAIN_BODY / BELLY / GOLD / BLUSH 即可（下方常量）
+     */
+
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ---------- 可调颜色（蒂芙尼青 / 米白腹 / 浅金角爪 / 腮红）----------
+    const MAIN_BODY = 0x2ec4b6;   /* 主体青蓝 */
+    const BELLY = 0xf5f0e8;      /* 腹部米白 */
+    const GOLD = 0xe8c878;      /* 角、趾浅金 */
+    const BLUSH = 0xffb7c5;     /* 粉腮红 */
+    const EYE_WHITE = 0xffffff;
+    const PUPIL = 0x1a2e28;
+
+    const viewport = document.getElementById('viewport');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xeef1f4); /* 与页面背景协调，略亮一点便于区分画布 */
+
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+    camera.position.set(0, 0.35, 2.8);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    viewport.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 1.2;
+    controls.maxDistance = 5;
+    controls.target.set(0, 0.15, 0);
+
+    /* PBR：柔和卡通黏土感 — 中等粗糙、低金属 */
+    function bodyMat(color, rough = 0.42, metal = 0.08) {
+      return new THREE.MeshStandardMaterial({
+        color,
+        roughness: rough,
+        metalness: metal,
+      });
+    }
+
+    /* ---------- 角色层级（便于做骨骼式旋转动画）---------- */
+    const dragon = new THREE.Group();
+    scene.add(dragon);
+
+    const torso = new THREE.Group();
+    dragon.add(torso);
+
+    /* 身体：椭球 */
+    const bodyGeo = new THREE.SphereGeometry(0.45, 32, 24);
+    bodyGeo.scale(1, 0.95, 0.85);
+    const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat(MAIN_BODY));
+    bodyMesh.castShadow = true;
+    bodyMesh.receiveShadow = true;
+    torso.add(bodyMesh);
+
+    /* 腹部补丁：略前凸的扁球 */
+    const bellyGeo = new THREE.SphereGeometry(0.32, 24, 20);
+    bellyGeo.scale(1.1, 0.85, 0.5);
+    const belly = new THREE.Mesh(bellyGeo, bodyMat(BELLY, 0.5, 0.02));
+    belly.position.set(0, -0.02, 0.32);
+    torso.add(belly);
+
+    /* 头部组 */
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 0.52, 0.05);
+    torso.add(headGroup);
+
+    const headGeo = new THREE.SphereGeometry(0.38, 32, 28);
+    const head = new THREE.Mesh(headGeo, bodyMat(MAIN_BODY));
+    head.castShadow = true;
+    headGroup.add(head);
+
+    /* 吻部 */
+    const snout = new THREE.Mesh(
+      new THREE.SphereGeometry(0.16, 16, 12),
+      bodyMat(BELLY, 0.48, 0.02)
+    );
+    snout.scale.set(1, 0.75, 1.1);
+    snout.position.set(0, -0.06, 0.38);
+    headGroup.add(snout);
+
+    /* 水滴状头顶装饰 */
+    const drop = new THREE.Mesh(
+      new THREE.ConeGeometry(0.08, 0.18, 12),
+      bodyMat(0x5eead4, 0.25, 0.15)
+    );
+    drop.position.set(0, 0.42, 0.05);
+    drop.rotation.x = Math.PI;
+    headGroup.add(drop);
+
+    /* 双角 */
+    const hornGeo = new THREE.ConeGeometry(0.06, 0.22, 10);
+    const hornMat = bodyMat(GOLD, 0.35, 0.35);
+    const hornL = new THREE.Mesh(hornGeo, hornMat);
+    hornL.position.set(-0.22, 0.36, 0);
+    hornL.rotation.z = 0.35;
+    hornL.rotation.x = -0.15;
+    headGroup.add(hornL);
+    const hornR = hornL.clone();
+    hornR.position.x *= -1;
+    hornR.rotation.z *= -1;
+    headGroup.add(hornR);
+
+    /* 大眼 */
+    function eye(x) {
+      const g = new THREE.Group();
+      const white = new THREE.Mesh(
+        new THREE.SphereGeometry(0.11, 16, 16),
+        bodyMat(EYE_WHITE, 0.25, 0)
+      );
+      white.position.z = 0.34;
+      const pupil = new THREE.Mesh(
+        new THREE.SphereGeometry(0.055, 12, 12),
+        bodyMat(PUPIL, 0.2, 0)
+      );
+      pupil.position.set(x * 0.02, 0, 0.42);
+      g.add(white, pupil);
+      g.position.set(x * 0.16, 0.06, 0.28);
+      return g;
+    }
+    headGroup.add(eye(-1));
+    headGroup.add(eye(1));
+
+    /* 腮红：小球嵌入脸部 */
+    function blush(x) {
+      const b = new THREE.Mesh(
+        new THREE.SphereGeometry(0.055, 12, 12),
+        bodyMat(BLUSH, 0.55, 0)
+      );
+      b.position.set(x * 0.22, -0.05, 0.3);
+      headGroup.add(b);
+    }
+    blush(-1);
+    blush(1);
+
+    /* 耳朵 */
+    const earGeo = new THREE.SphereGeometry(0.1, 12, 12);
+    earGeo.scale(0.6, 1, 0.5);
+    const ear = new THREE.Mesh(earGeo, bodyMat(MAIN_BODY));
+    ear.position.set(-0.38, 0.1, -0.05);
+    headGroup.add(ear);
+    const ear2 = ear.clone();
+    ear2.position.x *= -1;
+    headGroup.add(ear2);
+
+    /* 手臂（挥手绕肩） */
+    const shoulderL = new THREE.Group();
+    shoulderL.position.set(-0.42, 0.15, 0.05);
+    torso.add(shoulderL);
+    const armL = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.1, 0.28, 6, 12),
+      bodyMat(MAIN_BODY)
+    );
+    armL.rotation.z = 0.45;
+    armL.position.set(-0.12, -0.18, 0);
+    shoulderL.add(armL);
+
+    const shoulderR = new THREE.Group();
+    shoulderR.position.set(0.42, 0.15, 0.05);
+    torso.add(shoulderR);
+    const armR = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.1, 0.28, 6, 12),
+      bodyMat(MAIN_BODY)
+    );
+    armR.rotation.z = -0.45;
+    armR.position.set(0.12, -0.18, 0);
+    shoulderR.add(armR);
+
+    /* 腿与金色小趾 */
+    function leg(x) {
+      const g = new THREE.Group();
+      g.position.set(x * 0.22, -0.42, 0.08);
+      const upper = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.11, 0.22, 6, 10),
+        bodyMat(MAIN_BODY)
+      );
+      upper.position.y = -0.12;
+      const foot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.12, 14, 14),
+        bodyMat(BELLY, 0.45, 0.05)
+      );
+      foot.scale.set(1.1, 0.65, 1.3);
+      foot.position.y = -0.32;
+      /* 三个小金趾 */
+      for (let i = -1; i <= 1; i++) {
+        const toe = new THREE.Mesh(
+          new THREE.SphereGeometry(0.045, 8, 8),
+          bodyMat(GOLD, 0.4, 0.4)
+        );
+        toe.position.set(i * 0.06, -0.38, 0.08);
+        g.add(toe);
+      }
+      g.add(upper, foot);
+      return g;
+    }
+    torso.add(leg(-1));
+    torso.add(leg(1));
+
+    /* 尾巴：多段关节摆动 */
+    const tailRoot = new THREE.Group();
+    tailRoot.position.set(0, -0.05, -0.38);
+    torso.add(tailRoot);
+
+    const tailSegments = [];
+    let prev = tailRoot;
+    for (let i = 0; i < 5; i++) {
+      const seg = new THREE.Group();
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.14 - i * 0.015, 16, 16),
+        bodyMat(MAIN_BODY)
+      );
+      mesh.position.set(0, 0, -0.12);
+      seg.add(mesh);
+      seg.position.set(0, 0, i === 0 ? -0.05 : -0.14);
+      prev.add(seg);
+      tailSegments.push(seg);
+      prev = seg;
+    }
+    /* 尾尖一撮 */
+    const tip = new THREE.Mesh(
+      new THREE.ConeGeometry(0.08, 0.2, 10),
+      bodyMat(0x5eead4, 0.35, 0.12)
+    );
+    tip.position.set(0, 0.05, -0.18);
+    tip.rotation.x = Math.PI / 2;
+    prev.add(tip);
+
+    /* ---------- 灯光 ---------- */
+    const hemi = new THREE.HemisphereLight(0xffffff, 0xb8c5d0, 0.85);
+    scene.add(hemi);
+    const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+    dir.position.set(3, 8, 5);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(1024, 1024);
+    dir.shadow.camera.near = 0.5;
+    dir.shadow.camera.far = 20;
+    scene.add(dir);
+    const fill = new THREE.DirectionalLight(0xa8e8e0, 0.35);
+    fill.position.set(-4, 2, -2);
+    scene.add(fill);
+
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(8, 8),
+      new THREE.ShadowMaterial({ opacity: 0.08 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.75;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    /* ---------- 动画状态 ---------- */
+    let time = 0;
+    let waveTimer = 0;
+    let nodTimer = 0;
+    let tailTimer = 0;
+    let autoCycle = true;
+    let autoPhase = 0;
+
+    function waveAmp(dt) {
+      if (waveTimer <= 0) return 0;
+      waveTimer -= dt;
+      if (waveTimer < 0) waveTimer = 0;
+      /* 挥手：高频摆动，强度随剩余时间衰减 */
+      const env = Math.min(1, waveTimer * 2);
+      return Math.sin(time * 16) * 0.95 * env;
+    }
+
+    function nodAmp(dt) {
+      if (nodTimer <= 0) return 0;
+      nodTimer -= dt;
+      if (nodTimer < 0) nodTimer = 0;
+      const env = Math.min(1, nodTimer * 2.5);
+      return Math.sin(time * 10) * 0.4 * env;
+    }
+
+    function tailAmp(dt) {
+      if (tailTimer <= 0) return 0;
+      tailTimer -= dt;
+      if (tailTimer < 0) tailTimer = 0;
+      return Math.sin(time * 11) * (0.4 + tailTimer * 0.15);
+    }
+
+    document.querySelectorAll('#toolbar button[data-act]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const act = btn.getAttribute('data-act');
+        if (act === 'wave') waveTimer = 2.2;
+        if (act === 'nod') nodTimer = 1.8;
+        if (act === 'tail') tailTimer = 2.5;
+      });
+    });
+
+    const toggleBtn = document.getElementById('toggle-auto');
+    toggleBtn.addEventListener('click', () => {
+      autoCycle = !autoCycle;
+      toggleBtn.textContent = autoCycle ? '自动循环：开' : '自动循环：关';
+    });
+
+    function resize() {
+      const w = viewport.clientWidth;
+      const h = viewport.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+    window.addEventListener('resize', resize);
+    window.addEventListener('load', () => resize());
+
+    /* ---------- 主循环 ---------- */
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+      time += dt;
+
+      /* 待机：整体轻微摇摆 + 呼吸缩放 */
+      const breath = 1 + Math.sin(time * 1.8) * 0.018;
+      const sway = Math.sin(time * 0.9) * 0.04;
+      torso.scale.setScalar(breath);
+      dragon.rotation.y = sway;
+
+      /* 挥手：绕肩关节（仅左手大幅摆） */
+      const wv = waveAmp(dt);
+      shoulderL.rotation.z = 0.45 + wv;
+      shoulderR.rotation.z = -0.45 - wv * 0.2;
+
+      /* 点头 */
+      const nd = nodAmp(dt);
+      headGroup.rotation.x = 0.06 + nd;
+
+      /* 尾巴：待机微摆 + 触发「摆尾」时加大 */
+      const tw =
+        tailAmp(dt) * 0.45 +
+        Math.sin(time * 2.2) * (tailTimer > 0 ? 0.35 : 0.08);
+      tailSegments.forEach((seg, i) => {
+        seg.rotation.y = tw * (0.35 + i * 0.12);
+        seg.rotation.x = Math.sin(time * 1.5 + i) * 0.06;
+      });
+
+      /* 自动循环触发简短动作 */
+      if (autoCycle) {
+        autoPhase += dt;
+        if (autoPhase > 6) {
+          autoPhase = 0;
+          const r = Math.floor(Math.random() * 3);
+          if (r === 0) waveTimer = 1.6;
+          else if (r === 1) nodTimer = 1.4;
+          else tailTimer = 2;
+        }
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    /*
+     * ========== 替换为自定义 GLTF ==========
+     * 1. 引入 GLTFLoader：
+     *    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+     * 2. const loader = new GLTFLoader();
+     *    loader.load('/models/kirin.glb', (gltf) => {
+     *      dragon.clear(); // 或隐藏 procedural 组
+     *      gltf.scene.scale.setScalar(1);
+     *      dragon.add(gltf.scene);
+     *      // 若有 AnimationMixer：
+     *      // mixer = new THREE.AnimationMixer(gltf.scene);
+     *      // mixer.clipAction(gltf.animations[0]).play();
+     *    });
+     * 3. 动画循环里 mixer?.update(dt);
+     */
+  </script>
+</body>
+</html>
