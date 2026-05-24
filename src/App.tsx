@@ -968,7 +968,7 @@ const Navbar = ({
                   className="border-0 bg-transparent p-0 text-left cursor-pointer focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500"
                 >
                   <img
-                    src="/brand-logo.png"
+                    src={`${import.meta.env.BASE_URL}brand-logo.png`}
                     alt="水麒麟节水产业AI云平台"
                     className="block h-14 w-auto max-w-[min(52vw,280px)] object-contain object-left border-0 shadow-none sm:h-[4.25rem] lg:h-[4.75rem] lg:max-w-[min(64vw,400px)]"
                   />
@@ -1056,7 +1056,7 @@ const Navbar = ({
                   className="border-0 bg-transparent p-0 text-left cursor-pointer focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500"
                 >
                   <img
-                    src="/brand-logo.png"
+                    src={`${import.meta.env.BASE_URL}brand-logo.png`}
                     alt="水麒麟节水产业AI云平台"
                     className="block h-16 w-auto max-w-[min(70vw,400px)] object-contain object-left border-0 shadow-none sm:h-[4.75rem] lg:h-[5.25rem] lg:max-w-[min(76vw,460px)]"
                   />
@@ -1929,7 +1929,7 @@ const AIDiagnosisModal = ({
                         playsInline
                         preload="metadata"
                       >
-                        <source src="/kirin-mascot.mp4" type="video/mp4" />
+                        <source src={`${import.meta.env.BASE_URL}kirin-mascot.mp4`} type="video/mp4" />
                       </video>
                     </div>
                     <div className="max-w-md pb-0.5">
@@ -1964,7 +1964,7 @@ const AIDiagnosisModal = ({
                             controls={false}
                             disablePictureInPicture
                           >
-                            <source src="/kirin-mascot.mp4" type="video/mp4" />
+                            <source src={`${import.meta.env.BASE_URL}kirin-mascot.mp4`} type="video/mp4" />
                           </video>
                </div>
                         <div className="min-w-0 flex-1 pb-0.5 text-center sm:pb-2 sm:text-left">
@@ -3252,7 +3252,7 @@ const HomeKirinAssistantPanel = ({
               controls={false}
               disablePictureInPicture
             >
-              <source src="/kirin-mascot.mp4" type="video/mp4" />
+              <source src={`${import.meta.env.BASE_URL}kirin-mascot.mp4`} type="video/mp4" />
             </video>
           </div>
         </div>
@@ -3337,7 +3337,7 @@ const HomeKirinAssistantPanel = ({
                 controls={false}
                 disablePictureInPicture
               >
-                <source src="/kirin-mascot.mp4" type="video/mp4" />
+                <source src={`${import.meta.env.BASE_URL}kirin-mascot.mp4`} type="video/mp4" />
               </video>
       </motion.div>
     </motion.div>
